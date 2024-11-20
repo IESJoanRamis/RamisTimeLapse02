@@ -1,0 +1,273 @@
+import reactWebcam from "https://esm.sh/react-webcam";
+// Obtener los elementos del DOM 
+let videoElement = document.getElementById("video");
+let cameraSelect = document.getElementById("cameraSelect");
+let qualitySelect = document.getElementById("qualitySelect");
+let captureNameInput = document.getElementById("captureName");
+let fullScreenBtn = document.getElementById("fullScreenBtn");
+let startTimelapseBtn = document.getElementById("startTimelapseBtn");
+let captureInfo = document.getElementById("captureInfo");
+let controlWindow = document.getElementById("controlWindow");
+
+let intervalId = null;
+let mediaStream = null;
+let imageWidth = 1920;  // Default HD width
+let imageHeight = 1080; // Default HD height
+let captureCount = 0;
+let totalCaptureCount = 0;
+let isTimelapseRunning = false;
+let captureInterval = 5000; // Default to 5 seconds (in ms)
+let capturedFrames = []; // Almacenar las imágenes capturadas
+
+// Obtener las cámaras disponibles
+async function getCameras() {
+    try {
+        let devices = await navigator.mediaDevices.enumerateDevices();
+        let videoDevices = devices.filter(device => device.kind === 'videoinput');
+
+        cameraSelect.innerHTML = ''; // Limpiar las opciones
+        videoDevices.forEach((device, index) => {
+            let option = document.createElement("option");
+            option.value = device.deviceId;
+            option.text = `Cámara ${index + 1}`;
+            cameraSelect.appendChild(option);
+        });
+
+        // Seleccionar la primera cámara automáticamente
+        if (videoDevices.length > 0) {
+            startVideo(videoDevices[0].deviceId);
+        }
+    } catch (error) {
+        console.error("Error al obtener las cámaras:", error);
+    }
+}
+
+// Iniciar el stream de video con la cámara seleccionada
+async function startVideo(deviceId) {
+    try {
+        // Detener el stream existente antes de iniciar uno nuevo
+        if (mediaStream) {
+            mediaStream.getTracks().forEach(track => track.stop());
+        }
+
+        // Solicitar el acceso a la cámara seleccionada
+        mediaStream = await navigator.mediaDevices.getUserMedia({
+            video: { deviceId: deviceId }
+        });
+
+        // Asignar el stream al elemento de video
+        videoElement.srcObject = mediaStream;
+
+        // Reproducir el vídeo automáticamente
+        videoElement.play();
+
+        // Gestionar el autoplay (en caso de que sea bloqueado)
+        videoElement.addEventListener('loadeddata', () => {
+            if (videoElement.paused) {
+                videoElement.play().catch(error => {
+                    console.log("Autoplay fue bloqueado. El video necesita ser iniciado manualmente.", error);
+                });
+            }
+        });
+
+    } catch (error) {
+        console.error("Error al iniciar el video:", error);
+        alert("No se pudo acceder a la cámara. Verifica los permisos.");
+    }
+}
+
+// Cambiar cámara seleccionada
+cameraSelect.addEventListener('change', () => {
+    startVideo(cameraSelect.value);
+});
+
+// Configurar intervalo del timelapse
+function getTimelapseInterval() {
+    let hours = parseInt(document.getElementById("hours").value) || 0;
+    let minutes = parseInt(document.getElementById("minutes").value) || 0;
+    let seconds = parseInt(document.getElementById("seconds").value) || 0;
+    return (hours * 3600 + minutes * 60 + seconds) * 1000;
+}
+
+// Actualizar el intervalo dinámicamente sin reiniciar
+function updateCaptureInterval() {
+    clearInterval(intervalId);
+    captureInterval = getTimelapseInterval();
+    if (isTimelapseRunning) {
+        intervalId = setInterval(captureTimelapse, captureInterval);
+    }
+}
+
+// Función para capturar timelapse
+function captureTimelapse() {
+    let canvas = document.createElement("canvas");
+    canvas.width = imageWidth;
+    canvas.height = imageHeight;
+    let context = canvas.getContext("2d");
+
+    context.drawImage(videoElement, 0, 0, canvas.width, canvas.height);
+
+    let dataUrl = canvas.toDataURL("image/png");
+    capturedFrames.push(dataUrl); // Guardar la imagen capturada
+
+    let a = document.createElement('a');
+    let captureName = captureNameInput.value || 'MuseuRamisBalena001';
+
+    totalCaptureCount++;
+    a.href = dataUrl;
+    a.download = `${captureName}_${totalCaptureCount}.png`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+
+    captureCount++;
+    captureInfo.textContent = `Fotogramas: ${captureCount}`;
+}
+
+// Iniciar el timelapse
+function startTimelapse() {
+    if (isTimelapseRunning) {
+        stopTimelapse();
+        return;
+    }
+
+    captureCount = 0;
+    capturedFrames = []; // Reiniciar frames
+    captureInfo.textContent = "Fotogramas: 0";
+
+    // Obtener el nuevo intervalo
+    captureInterval = getTimelapseInterval();
+
+    // Iniciar el timelapse
+    intervalId = setInterval(captureTimelapse, captureInterval);
+
+    // Cambiar el color del botón y estado
+    startTimelapseBtn.style.color = 'red';
+    isTimelapseRunning = true;
+}
+
+// Detener el timelapse
+function stopTimelapse() {
+    clearInterval(intervalId);
+    intervalId = null;
+
+    // Cambiar el color del botón y estado
+    startTimelapseBtn.style.color = 'white';
+    isTimelapseRunning = false;
+
+    alert("Timelapse detenido. Revisa las capturas.");
+}
+
+// Crear el video automáticamente con FFmpeg y mostrarlo en una nueva ventana emergente
+async function createTimelapseVideo() {
+    const { createFFmpeg, fetchFile } = FFmpeg;
+    const ffmpeg = createFFmpeg({ log: true });
+
+    await ffmpeg.load(); // Cargar la biblioteca FFmpeg.js
+
+    // Escribir todas las imágenes capturadas en FFmpeg
+    for (let i = 0; i < capturedFrames.length; i++) {
+        let fileName = `frame_${i + 1}.png`;
+        let imageFile = await fetchFile(capturedFrames[i]); // Convertir base64 a archivo
+        ffmpeg.FS('writeFile', fileName, imageFile);
+    }
+
+    // Crear el video usando las imágenes (a 30 fps, por ejemplo)
+    await ffmpeg.run(
+        '-framerate', '30',  // Velocidad de fotogramas
+        '-i', 'frame_%d.png', // Patrón de archivo de imagen
+        '-pix_fmt', 'yuv420p',  // Formato de píxeles compatible
+        'timelapse.mp4'  // Nombre de salida del video
+    );
+
+    // Leer el archivo generado desde el sistema de archivos virtual de FFmpeg.js
+    const data = ffmpeg.FS('readFile', 'timelapse.mp4');
+
+    // Crear un Blob con el video y generar un URL para su descarga
+    const videoBlob = new Blob([data.buffer], { type: 'video/mp4' });
+    const videoUrl = URL.createObjectURL(videoBlob);
+
+    // Abrir el video en una nueva ventana emergente
+    let newWindow = window.open("", "Video", "width=800,height=600"); // Abrir una ventana emergente
+    newWindow.document.write(`
+        <video controls autoplay style="width: 100%; height: 100%;">
+            <source src="${videoUrl}" type="video/mp4">
+            Your browser does not support the video tag.
+        </video>
+    `);
+
+    // Liberar la URL creada después de que el video se cargue
+    newWindow.onload = function() {
+        URL.revokeObjectURL(videoUrl);
+    };
+}
+
+// Vincular eventos
+startTimelapseBtn.addEventListener('click', startTimelapse);
+
+// Detectar cambios en los inputs de intervalo
+document.getElementById("hours").addEventListener("input", updateCaptureInterval);
+document.getElementById("minutes").addEventListener("input", updateCaptureInterval);
+document.getElementById("seconds").addEventListener("input", updateCaptureInterval);
+
+// Configurar calidad del video
+qualitySelect.addEventListener("change", () => {
+    let quality = qualitySelect.value;
+
+    switch (quality) {
+        case 'normal':
+            imageWidth = 640;
+            imageHeight = 480;
+            break;
+        case 'hd':
+            imageWidth = 1920;
+            imageHeight = 1080;
+            break;
+        case 'ultrahd':
+            imageWidth = 3840;
+            imageHeight = 2160;
+            break;
+        case '4k':
+            imageWidth = 4096;
+            imageHeight = 2160;
+            break;
+    }
+});
+
+// Pantalla completa
+fullScreenBtn.addEventListener("click", () => {
+    if (!document.fullscreenElement) {
+        videoElement.requestFullscreen();
+    } else {
+        document.exitFullscreen();
+    }
+});
+
+// Hacer la ventana de control arrastrable
+controlWindow.onmousedown = function (event) {
+    let shiftX = event.clientX - controlWindow.getBoundingClientRect().left;
+    let shiftY = event.clientY - controlWindow.getBoundingClientRect().top;
+
+    function moveAt(pageX, pageY) {
+        controlWindow.style.left = pageX - shiftX + 'px';
+        controlWindow.style.top = pageY - shiftY + 'px';
+    }
+
+    function onMouseMove(event) {
+        moveAt(event.pageX, event.pageY);
+    }
+
+    document.addEventListener('mousemove', onMouseMove);
+
+    controlWindow.onmouseup = function () {
+        document.removeEventListener('mousemove', onMouseMove);
+        controlWindow.onmouseup = null;
+    };
+};
+
+controlWindow.ondragstart = function () {
+    return false;
+};
+
+// Obtener las cámaras al cargar la página
+getCameras();
