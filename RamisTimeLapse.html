@@ -1,0 +1,60 @@
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Timelapse con Cámara</title>
+    <link rel="stylesheet" href="styles.css"> <!-- Vincula el archivo CSS -->
+</head>
+<body>
+    <div id="videoContainer">
+        <video id="video" autoplay></video>
+
+        <!-- Ventana flotante de controles -->
+        <div id="controlWindow">
+            <h2>Museu Ramis</h2>
+
+            <!-- Seleccionar cámara -->
+            <label for="cameraSelect">Cámara:</label>
+            <select id="cameraSelect"></select>
+
+            <!-- Configuración de calidad -->
+            <label for="qualitySelect">Calidad:</label>
+            <select id="qualitySelect">
+                <option value="normal">Normal</option>
+                <option value="hd" selected>HD</option>
+                <option value="ultrahd">UltraHD</option>
+                <option value="4k">4K</option>
+            </select>
+
+            <!-- Configuración de nombre de captura -->
+            <label for="captureName">Nombre de captura:</label>
+            <input type="text" id="captureName" value="MuseuRamisBalena001">
+
+            <!-- Configuración de tiempo de timelapse -->
+            <div id="timelapseConfig">
+                <label for="hours">Hor:</label>
+                <input type="number" id="hours" min="0" value="0">
+                <label for="minutes">Min:</label>
+                <input type="number" id="minutes" min="0" max="59" value="0">
+                <label for="seconds">Seg:</label>
+                <input type="number" id="seconds" min="0" max="59" value="5">
+            </div>
+
+     
+            <!-- Botón para comenzar captura -->
+<div id="buttonContainer">
+        <!-- Botón para comenzar captura -->
+        <button id="startTimelapseBtn">&#11044;<span>Capturar</span></button>
+  <!-- Información de capturas -->
+        <p id="captureInfo">Fotos: 0</p>
+        <!-- Botón para pantalla completa -->
+        <button id="fullScreenBtn">&#9712;<span>Full</span></button>
+
+    </div>
+</div>
+        </div>
+    </div>
+    <script src="https://cdn.jsdelivr.net/npm/@ffmpeg/ffmpeg@0.10.0"></script>
+    <script src="scripts.js"></script> <!-- Vincula el archivo JS -->
+</body>
+</html>
